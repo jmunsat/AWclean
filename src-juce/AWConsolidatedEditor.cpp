@@ -156,6 +156,9 @@ void AWLookAndFeel::setLightTheme()
     setColour(juce::TextButton::ColourIds::buttonColourId, card);
     setColour(juce::TextButton::ColourIds::textColourOffId, ink);
     setColour(juce::ComboBox::ColourIds::outlineColourId, line);
+    setColour(juce::ToggleButton::ColourIds::textColourId, ink);
+    setColour(juce::ToggleButton::ColourIds::tickColourId, accent);
+    setColour(juce::ToggleButton::ColourIds::tickDisabledColourId, muted);
 
     setColour(ColourIds::gradientStart, paper);
     setColour(ColourIds::gradientStop, paper);
@@ -2008,6 +2011,29 @@ AWConsolidatedAudioProcessorEditor::AWConsolidatedAudioProcessorEditor(
     };
     frame->addAndMakeVisible(*docToggle);
 
+    autoGainToggle = std::make_unique<juce::ToggleButton>("Auto gain");
+    autoGainToggle->setTooltip("Match the output loudness to the input");
+    autoGainToggle->onClick = [w = juce::Component::SafePointer(this)]() {
+        if (!w)
+            return;
+        auto *p = w->processor.autoGainParam;
+        p->beginChangeGesture();
+        p->setValueNotifyingHost(w->autoGainToggle->getToggleState() ? 1.f : 0.f);
+        p->endChangeGesture();
+        w->refreshAutoGain();
+    };
+    frame->addAndMakeVisible(*autoGainToggle);
+
+    autoGainReadout = std::make_unique<juce::TextButton>("0.0 dB");
+    autoGainReadout->setTitle("Auto gain amount. Click to lock or unlock it.");
+    autoGainReadout->onClick = [w = juce::Component::SafePointer(this)]() {
+        if (!w)
+            return;
+        w->processor.autoGain.locked = !w->processor.autoGain.locked;
+        w->refreshAutoGain();
+    };
+    frame->addChildComponent(*autoGainReadout);
+
     docBodyLabel = std::make_unique<DocHeader>(this);
     docBodyLabel->setTitle("Documentation Header");
     frame->addAndMakeVisible(*docBodyLabel);
@@ -2073,6 +2099,26 @@ AWConsolidatedAudioProcessorEditor::AWConsolidatedAudioProcessorEditor(
 
     if (processor.properties->getBoolValue("checkForUpdates", true))
         checkForUpdates(false);
+}
+
+void AWConsolidatedAudioProcessorEditor::refreshAutoGain()
+{
+    auto on = processor.autoGainParam->get();
+    if (autoGainToggle->getToggleState() != on)
+        autoGainToggle->setToggleState(on, juce::dontSendNotification);
+    autoGainReadout->setVisible(on);
+    if (!on)
+        return;
+
+    auto db = processor.autoGain.appliedDb.load();
+    auto txt = (db >= 0.f ? "+" : "") + juce::String(db, 1) + " dB";
+    if (processor.autoGain.locked)
+        txt = "Locked " + txt;
+    if (txt != lastAutoGainText)
+    {
+        lastAutoGainText = txt;
+        autoGainReadout->setButtonText(txt);
+    }
 }
 
 void AWConsolidatedAudioProcessorEditor::checkForUpdates(bool userAsked)
@@ -2206,6 +2252,8 @@ void AWConsolidatedAudioProcessorEditor::idle()
         hideUpdateButtonAt = 0;
         updateButton->setVisible(false);
     }
+
+    refreshAutoGain();
 
     if (processor.refreshUI.exchange(false))
     {
@@ -2357,8 +2405,10 @@ void AWConsolidatedAudioProcessorEditor::resized()
     bypassButton->setBounds(ta);
 
     auto footer = contentBounds().withTrimmedTop(contentHeight - 40).reduced(0, 7);
-    docToggle->setBounds(footer.withX(100).withWidth(140));
-    updateButton->setBounds(footer.withX(contentWidth - 100 - 170).withWidth(170));
+    docToggle->setBounds(footer.withX(96).withWidth(124));
+    autoGainToggle->setBounds(footer.withX(232).withWidth(96));
+    autoGainReadout->setBounds(footer.withX(330).withWidth(120));
+    updateButton->setBounds(contentWidth - rowX - 190, contentHeight - 40 - 25, 190, 22);
 }
 
 void AWConsolidatedAudioProcessorEditor::paint(juce::Graphics &g)

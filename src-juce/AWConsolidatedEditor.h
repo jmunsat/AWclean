@@ -209,6 +209,11 @@ class AWConsolidatedAudioProcessorEditor : public juce::AudioProcessorEditor,
     void closeBrowser();
     void toggleFavorite(const std::string &name);
     std::unique_ptr<juce::TextButton> docToggle;
+    // AWclean: auto gain switch, and a readout of the correction that locks it when clicked
+    std::unique_ptr<juce::ToggleButton> autoGainToggle;
+    std::unique_ptr<juce::TextButton> autoGainReadout;
+    juce::String lastAutoGainText;
+    void refreshAutoGain();
     // AWclean: shows when GitHub has a newer release; opens the release page
     std::unique_ptr<juce::TextButton> updateButton;
     int lastUpdateGeneration{-1};

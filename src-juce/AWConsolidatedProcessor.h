@@ -6,6 +6,7 @@
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "clap-juce-extensions/clap-juce-extensions.h"
 #include "AWCleanUpdate.h"
+#include "AWCleanAutoGain.h"
 
 #if MAC
 #include <execinfo.h>
@@ -341,6 +342,11 @@ class AWConsolidatedAudioProcessor : public juce::AudioProcessor,
     std::unique_ptr<juce::PropertiesFile> properties;
 
     std::unique_ptr<awclean::UpdateChecker> updateChecker;
+
+    // AWclean: loudness-matched output, after the effect and before the output knob
+    awclean::AutoGain autoGain;
+    juce::AudioParameterBool *autoGainParam{nullptr};
+    bool autoGainWasOn{false};
 
   private:
     template <typename T> struct PrecisionDependantProcessing

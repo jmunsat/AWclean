@@ -74,6 +74,13 @@ jobs:
           cmake -S . -B ./build ${{ matrix.cmake_args }} ${{ steps.ver.outputs.args }} -DCMAKE_BUILD_TYPE=Release -DBUILD_JUCE_PLUGIN=TRUE
           cmake --build ./build --config Release --target awcons-installer --parallel 3
 
+      - name: Check auto gain lands on the input's loudness
+        if: runner.os == 'Linux'
+        run: |
+          c++ -std=c++17 -O2 -I src -I src-juce awclean/test/autogain_test.cpp \
+            build/libairwin-registry.a build/libawdoc_resources.a -o autogain_test
+          ./autogain_test
+
       - name: Show Installer Directory
         run: |
           ls -l ./build/installer
