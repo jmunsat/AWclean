@@ -587,13 +587,24 @@ struct Picker : public juce::Component, public juce::TextEditor::Listener
         g.drawRoundedRectangle(bounds, 5, 1);
         g.setColour(findColour(ColourIds::pickerForeground));
         g.setFont(editor->lnf->lookupFont(pluginName));
+        // AWclean names are longer, so shrink the font until it clears the side buttons
         auto shownName = juce::String::fromUTF8(awclean::displayName(rg.name, rg.title).c_str());
-        if (!typeinEd->isVisible())
-            g.drawFittedText(shownName, bounds.reduced(8, 5).toNearestInt(),
-                             juce::Justification::centredBottom, 1, 0.6f);
-        auto ga = juce::GlyphArrangement();
+        auto nameFont = editor->lnf->lookupFont(pluginName);
         auto tbx = bounds.reduced(8, 5);
-        ga.addFittedText(editor->lnf->lookupFont(pluginName), shownName, tbx.getX(), tbx.getY(),
+        auto nameWidth = bounds.getWidth() - 2 * 62.f;
+        for (int tries = 0; tries < 20; ++tries)
+        {
+            juce::GlyphArrangement m;
+            m.addLineOfText(nameFont, shownName, 0, 0);
+            if (m.getBoundingBox(0, -1, true).getWidth() <= nameWidth || nameFont.getHeight() < 12)
+                break;
+            nameFont = nameFont.withHeight(nameFont.getHeight() - 1);
+        }
+        g.setFont(nameFont);
+        if (!typeinEd->isVisible())
+            g.drawText(shownName, tbx, juce::Justification::centredBottom);
+        auto ga = juce::GlyphArrangement();
+        ga.addFittedText(nameFont, shownName, tbx.getX(), tbx.getY(),
                          tbx.getWidth(), tbx.getHeight(), juce::Justification::centredBottom, 1);
         titleBox = ga.getBoundingBox(0, -1, true);
 
@@ -1888,7 +1899,9 @@ static std::string awcleanDocFor(const AirwinRegistry::awReg &rg)
         }
         res += "\n";
     }
-    res += "Category: " + rg.category + " (Chris files it under " + rg.chrisCategory + ")";
+    res += "Category: " + rg.category;
+    if (!rg.chrisCategory.empty() && rg.chrisCategory != rg.category)
+        res += " (Chris files it under " + rg.chrisCategory + ")";
     return res;
 }
 
