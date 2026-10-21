@@ -38,7 +38,7 @@ set(AW2J_PRODUCT_NAME "AWclean")
 
 juce_add_plugin(${PROJECT_NAME}
   PRODUCT_NAME ${AW2J_PRODUCT_NAME}
-  COMPANY_NAME "jmunsat"
+  COMPANY_NAME "AWclean"
   COMPANY_WEBSITE "https://github.com/jmunsat/AWclean"
   BUNDLE_ID "com.jmunsat.awclean"
   PLUGIN_MANUFACTURER_CODE Jmun

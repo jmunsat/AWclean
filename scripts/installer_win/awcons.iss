@@ -1,4 +1,4 @@
-#define MyAppPublisher "jmunsat"
+#define MyAppPublisher "AWclean"
 #define MyAppURL "https://github.com/jmunsat/AWclean"
 #define MyAppName "AWclean"
 #define MyAppNameCondensed "AWclean"

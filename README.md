@@ -21,7 +21,7 @@ what you read:
 - **Update button.** When opened, AWclean checks this repo's GitHub releases and shows an
   "Update available" button that opens the download page. Turn it off in the settings cog.
 
-It installs as its own plugin ("AWclean", maker "jmunsat"), so the original Airwindows
+It installs as its own plugin ("AWclean", maker "AWclean"), so the original Airwindows
 Consolidated keeps working next to it. Favorites and custom docs are shared with the
 original, since both read the same `Airwindows` settings folder.
 
