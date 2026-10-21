@@ -34,25 +34,25 @@ if (UNIX AND NOT APPLE)
   list(APPEND AWCO_FORMATS LV2)
 endif()
 
-set(AW2J_PRODUCT_NAME "Airwindows Consolidated")
+set(AW2J_PRODUCT_NAME "AWclean")
 
 juce_add_plugin(${PROJECT_NAME}
   PRODUCT_NAME ${AW2J_PRODUCT_NAME}
-  COMPANY_NAME "Airwindows"
-  COMPANY_WEBSITE "https://airwindows.com/"
-  BUNDLE_ID "com.airwindows.all-windows"
-  PLUGIN_MANUFACTURER_CODE Dthr
-  PLUGIN_CODE alFX
+  COMPANY_NAME "AWclean"
+  COMPANY_WEBSITE "https://github.com/jmunsat/AWclean"
+  BUNDLE_ID "com.jmunsat.awclean"
+  PLUGIN_MANUFACTURER_CODE Jmun
+  PLUGIN_CODE AWcl
 
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE
   NEEDS_MIDI_OUTPUT FALSE
   IS_MIDI_EFFECT FALSE
   MICROPHONE_PERMISSION_ENABLED TRUE
-  MICROPHONE_PERMISSION_TEXT "AirwindowsEffects would like to use your microphone for Audio Input"
+  MICROPHONE_PERMISSION_TEXT "AWclean would like to use your microphone for Audio Input"
 
   BLUETOOTH_PERMISSION_ENABLED TRUE
-  BLUETOOTH_PERMISSION_TEXT "Airwindows Effects would like to use BlueTooth"
+  BLUETOOTH_PERMISSION_TEXT "AWclean would like to use BlueTooth"
 
 
   COPY_PLUGIN_AFTER_BUILD ${COPY_PLUGIN_AFTER_BUILD}
@@ -62,8 +62,8 @@ juce_add_plugin(${PROJECT_NAME}
   AU_SANDBOX_SAFE TR-UE
 
 
-  LV2_URI https://airwindows.com/lv2/airwindows-all
-  LV2_SHARED_LIBRARY_NAME AirwindowsALL
+  LV2_URI https://github.com/jmunsat/AWclean/lv2
+  LV2_SHARED_LIBRARY_NAME AWclean
 
   FORMATS ${AWCO_FORMATS}
   )
@@ -96,6 +96,7 @@ target_compile_definitions(${PROJECT_NAME} PUBLIC
 
         JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_USE_CURL=0
+        AWCLEAN_REPO="jmunsat/AWclean"
         JUCE_WEB_BROWSER=0
         JUCE_USE_CAMERA=disabled
 
@@ -134,7 +135,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 clap_juce_extensions_plugin(TARGET ${PROJECT_NAME}
-    CLAP_ID "com.airwindows.consolidated"
+    CLAP_ID "com.jmunsat.awclean"
     CLAP_PROCESS_EVENTS_RESOLUTION_SAMPLES TRUE
     CLAP_FEATURES
       "audio-effect"

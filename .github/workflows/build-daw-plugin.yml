@@ -1,20 +1,12 @@
-name: Build DAW Plugin
+name: Build AWclean
 on:
   push:
     branches:
       - main
-      - 'releases/**'
     tags:
-      - 'v**'
+      - 'v*'
   pull_request:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Update"]
-    types:
-      - completed
-
-env:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 defaults:
   run:
@@ -22,23 +14,15 @@ defaults:
 
 jobs:
   build_plugin:
-    name: DAW Build - ${{ matrix.name }}
+    name: Build - ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-2022
             name: windows-x64
             cmake_args: -G"Visual Studio 17 2022" -A x64
-
-          - os: windows-2022
-            name: windows-juce7
-            downgrade_juce: true
-            cmake_args: -G"Visual Studio 17 2022" -A x64 -DAWCO_ONJUCE7=TRUE
-
-          - os: windows-2022
-            name: windows-arm64ec
-            cmake_args: -G"Visual Studio 17 2022" -A arm64ec -DAWCO_ARM64EC=TRUE -DCMAKE_SYSTEM_VERSION=10
 
           - os: macos-latest
             name: macos
@@ -50,98 +34,52 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Prepare for JUCE
+        if: runner.os != 'Linux'
         uses: surge-synthesizer/sst-githubactions/prepare-for-juce@main
         with:
           os: ${{ runner.os }}
 
-      # Allow 10.13
-      #- uses: maxim-lobanov/setup-xcode@v1
-      #  if: runner.os == 'macOS'
-      #  with:
-      #    xcode-version: '16.2.0'
-
-      - uses: apple-actions/import-codesign-certs@v3
-        if: runner.os == 'macOS' && github.event_name != 'pull_request'
-        with:
-          p12-file-base64: ${{ secrets.MAC_CERTS_P12 }}
-          p12-password: ${{ secrets.CERT_PWD }}
-
-      - name: Build release version
-        if: github.event_name != 'pull_request'
+      # The shared action above pins gcc-12, which current Ubuntu runners no longer ship
+      - name: Prepare for JUCE (Linux)
+        if: runner.os == 'Linux'
         run: |
-          
-          export MAC_SIGNING_CERT="${{ secrets.MAC_SIGNING_CERT_NAME }}"
-          export MAC_INSTALLING_CERT="${{ secrets.MAC_INSTALLING_CERT_NAME }}"
-  
-          export MAC_SIGNING_ID="${{ secrets.MAC_SIGNING_ID }}"
-          export MAC_SIGNING_1UPW="${{ secrets.MAC_SIGNING_1UPW }}"
-          export MAC_SIGNING_TEAM="${{ secrets.MAC_SIGNING_TEAM }}"
-  
-          cmake -S . -B ./build ${{ matrix.cmake_args }} -DCMAKE_BUILD_TYPE=Release -DBUILD_JUCE_PLUGIN=TRUE
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libasound2-dev libjack-jackd2-dev libx11-dev \
+            libxrandr-dev libxinerama-dev libxcursor-dev libxcomposite-dev libxext-dev \
+            libfreetype-dev libfontconfig1-dev libgl-dev libcurl4-openssl-dev
+
+      - name: Work out version
+        id: ver
+        run: |
+          # Tags look like v1.2.3; the plugin reports that version so the update button can compare
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "args=-DAWCLEAN_VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "args=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check overlay header is up to date and formulas work
+        if: runner.os == 'Linux'
+        run: |
+          python3 awclean/gen_overlay.py
+          git diff --exit-code src/AWCleanOverlay.h
+          c++ -std=c++17 -I src awclean/test/overlay_test.cpp -o overlay_test
+          ./overlay_test
+
+      - name: Build
+        run: |
+          # No Apple Developer ID here, so the mac installer is unsigned and the plugins are ad-hoc signed
+          cmake -S . -B ./build ${{ matrix.cmake_args }} ${{ steps.ver.outputs.args }} -DCMAKE_BUILD_TYPE=Release -DBUILD_JUCE_PLUGIN=TRUE
           cmake --build ./build --config Release --target awcons-installer --parallel 3
 
-      - name: Configure pull request version
-        if: github.event_name == 'pull_request'
+      - name: Check auto gain lands on the input's loudness
+        if: runner.os == 'Linux'
         run: |
-          cmake -S . -B ./build ${{ matrix.cmake_args }} -DCMAKE_BUILD_TYPE=Debug -DBUILD_JUCE_PLUGIN=TRUE
-
-      - name: Build pull request version
-        if: github.event_name == 'pull_request'
-        run: |
-          cmake --build ./build --config Debug --target awcons-installer --parallel 3
-
-      - name: Show pull request version
-        if: github.event_name == 'pull_request'
-        run: |
-          find ./build/src-juce/airwin-consolidated_artefacts -print
-          find ./build/installer -print
-
-      - name: Show Build Directory
-        run: |
-          ls -l ./build
-
-      - name: Show Installer Directory
-        if: github.event_name != 'pull_request'
-        run: |
-          ls -l ./build/installer
-
-      # The aborted check updates plan
-      #- name: Create Update HTML on Linux
-      #  if: runner.os == 'Linux' && github.event_name != 'pull_request'
-      #  run: |
-      #    ./scripts/check-update/make-update.sh > ./build/installer/check-updates.html
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        if: runner.os != 'Linux' # since that gets docker built below
-        with:
-          path: build/installer
-          name: dawplugin-${{ matrix.name }}
-
-
-  build_plugin_docker:
-    name: Docker Build Ubuntu20 ${{ matrix.name }}
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Build in Docker
-        uses: surge-synthesizer/sst-githubactions/cmake-in-docker@main
-        with:
-          image: ghcr.io/surge-synthesizer/sst-dockerimages/ubuntu20_gcc11:main
-          username: ${{ github.actor }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          cmakeArgs: -DCMAKE_BUILD_TYPE=Release -GNinja -DBUILD_JUCE_PLUGIN=TRUE
-          target: awcons-installer
-
+          c++ -std=c++17 -O2 -I src -I src-juce awclean/test/autogain_test.cpp \
+            build/libairwin-registry.a build/libawdoc_resources.a -o autogain_test
+          ./autogain_test
 
       - name: Show Installer Directory
         run: |
@@ -151,28 +89,23 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: build/installer
-          name: build-docker-linux
+          name: awclean-${{ matrix.name }}
 
-  publish-dawplugin-nightly:
-    name: Publish DAWPlugin
-    # only create a release if a tag was created that is called e.g. v1.2.3
-    # see also https://vcvrack.com/manual/Manifest#version
-    if: ${{ github.ref == 'refs/heads/main' && github.repository_owner == 'baconpaul' }}
+  publish_release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    needs: [build_plugin, build_plugin_docker]
+    needs: [build_plugin]
+    permissions:
+      contents: write
     steps:
-      - name: Upload to Nightly
-        uses: surge-synthesizer/sst-githubactions/upload-to-release@main
+      - uses: actions/download-artifact@v4
         with:
-          tag: DAWPlugin
-          reuse_tag: true
-          create_tag: false
-          token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist
+          merge-multiple: true
 
-      - name: Post to Discord
-        uses: surge-synthesizer/sst-githubactions/discord-release-notify@main
+      - name: Create release
+        uses: softprops/action-gh-release@v2
         with:
-          webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          tag: DAWPlugin
-          title: "A New AirWindows Conslidated Version is Available"
-
+          files: dist/*
+          generate_release_notes: true

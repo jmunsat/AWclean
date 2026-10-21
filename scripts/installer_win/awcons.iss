@@ -1,8 +1,8 @@
-#define MyAppPublisher "Airwindows (with BaconPaul and members of the Surge Synth Team)"
-#define MyAppURL "https://airwindows.com/"
-#define MyAppName "Airwindows Consolidated"
-#define MyAppNameCondensed "AirwindowsConsolidated"
-#define MyID "1762E8B5-648B-4581-93D8-41CCE83DE14B"
+#define MyAppPublisher "AWclean"
+#define MyAppURL "https://github.com/jmunsat/AWclean"
+#define MyAppName "AWclean"
+#define MyAppNameCondensed "AWclean"
+#define MyID "6C1E2A4D-3B7F-4E59-9A0C-5D21C0A1E001"
 
 #ifndef MyAppVersion
 #define MyAppVersion "0.0.0"

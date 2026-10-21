@@ -15,7 +15,13 @@ string(TIMESTAMP YEAR "%Y")
 math(EXPR PART0 "${YEAR}")
 math(EXPR PART1 "${DAY_OF_YEAR} + 1")
 
-project(Airwin2Rack VERSION 1.${PART0}.${PART1} LANGUAGES C CXX)
+# AWclean: release builds pass -DAWCLEAN_VERSION=x.y.z from the git tag so the
+# update checker can compare against GitHub releases
+if (DEFINED AWCLEAN_VERSION)
+    project(Airwin2Rack VERSION ${AWCLEAN_VERSION} LANGUAGES C CXX)
+else()
+    project(Airwin2Rack VERSION 1.${PART0}.${PART1} LANGUAGES C CXX)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

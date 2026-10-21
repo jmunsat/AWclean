@@ -23,6 +23,7 @@
 #include <algorithm>
 
 #include "airwin_consolidated_base.h"
+#include "AWClean.h"
 
 struct AirwinRegistry
 {
@@ -39,6 +40,10 @@ struct AirwinRegistry
             []() { return nullptr; }};
         int ordering{-1};
         std::vector<std::string> collections{};
+        // AWclean: plain-English title and note, and Chris's original category
+        std::string title{};
+        std::string note{};
+        std::string chrisCategory{};
     };
     static std::vector<awReg> registry;
     static std::set<std::string> categories;
@@ -76,8 +81,23 @@ struct AirwinRegistry
         completeRegistry();
     }
 
+    static void applyAWCleanOverlay(awReg &r)
+    {
+        if (r.chrisCategory.empty())
+            r.chrisCategory = r.category;
+        if (auto e = awclean::lookup(r.name))
+        {
+            r.title = e->title;
+            r.note = e->note ? e->note : "";
+            r.category = e->category;
+        }
+    }
+
     static int completeRegistry()
     {
+        for (auto &r : registry)
+            applyAWCleanOverlay(r);
+
         int idx{0};
         for (const auto &r : registry)
         {

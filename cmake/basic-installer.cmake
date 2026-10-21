@@ -45,10 +45,10 @@ if (WIN32)
             POST_BUILD
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             COMMAND ${CMAKE_COMMAND} -E echo "Cleaning up Windows goobits"
-            COMMAND ${CMAKE_COMMAND} -E rm -f "${AWCONS_PRODUCT_DIR}/Airwindows Consolidated.exp"
-            COMMAND ${CMAKE_COMMAND} -E rm -f "${AWCONS_PRODUCT_DIR}/Airwindows Consolidated.ilk"
-            COMMAND ${CMAKE_COMMAND} -E rm -f "${AWCONS_PRODUCT_DIR}/Airwindows Consolidated.lib"
-            COMMAND ${CMAKE_COMMAND} -E rm -f "${AWCONS_PRODUCT_DIR}/Airwindows Consolidated.pdb"
+            COMMAND ${CMAKE_COMMAND} -E rm -f "${AWCONS_PRODUCT_DIR}/AWclean.exp"
+            COMMAND ${CMAKE_COMMAND} -E rm -f "${AWCONS_PRODUCT_DIR}/AWclean.ilk"
+            COMMAND ${CMAKE_COMMAND} -E rm -f "${AWCONS_PRODUCT_DIR}/AWclean.lib"
+            COMMAND ${CMAKE_COMMAND} -E rm -f "${AWCONS_PRODUCT_DIR}/AWclean.pdb"
             )
 endif ()
 
@@ -83,7 +83,7 @@ elseif (DEFINED AWCO_ONJUCE7)
 else()
     set(AWXTRANAME "")
 endif()
-set(AWCONS_ZIP AirwindowsConsolidated-${AWCONS_DATE}-${VERSION_CHUNK}-${CMAKE_SYSTEM_NAME}${AWXTRANAME}.zip)
+set(AWCONS_ZIP AWclean-${AWCONS_DATE}-${VERSION_CHUNK}-${CMAKE_SYSTEM_NAME}${AWXTRANAME}.zip)
 message(STATUS "Will create zip file '${AWCONS_ZIP}'")
 
 if (APPLE)
@@ -93,7 +93,7 @@ if (APPLE)
             POST_BUILD
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             COMMAND ${CMAKE_COMMAND} -E make_directory installer
-            COMMAND ${CMAKE_SOURCE_DIR}/scripts/installer_mac/make_installer.sh "Airwindows Consolidated" ${CMAKE_BINARY_DIR}/awcons-products ${CMAKE_SOURCE_DIR}/res/installer_mac ${CMAKE_BINARY_DIR}/installer "${AWCONS_DATE}-${VERSION_CHUNK}"
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/installer_mac/make_installer.sh "AWclean" ${CMAKE_BINARY_DIR}/awcons-products ${CMAKE_SOURCE_DIR}/res/installer_mac ${CMAKE_BINARY_DIR}/installer "${AWCONS_DATE}-${VERSION_CHUNK}"
             # COMMAND zip -r installer/${AWCONS_ZIP} ${AWCONS_PRODUCT_DIR}/
     )
 elseif (WIN32)

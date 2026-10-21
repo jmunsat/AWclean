@@ -33,6 +33,10 @@ AWConsolidatedAudioProcessor::AWConsolidatedAudioProcessor()
                     awDisplayProcessor->setParameter(id, fxParams[id]->get());
                 }
                 awDisplayProcessor->setParameter(i, f);
+                std::string ov;
+                if (awclean::display(awclean::param(this->currentOverlay, i), f,
+                                     this->overlaySampleRate(), ov))
+                    return ov;
                 char tl[kVstMaxParamStrLen], td[kVstMaxParamStrLen];
                 this->awDisplayProcessor->getParameterDisplay(i, td);
                 this->awDisplayProcessor->getParameterLabel(i, tl);
@@ -48,9 +52,7 @@ AWConsolidatedAudioProcessor::AWConsolidatedAudioProcessor()
             if (this->awDisplayProcessor && i < this->nProcessorParams)
             {
                 float rv = 0.f;
-                auto res =
-                    this->awDisplayProcessor->parameterTextToValue(i, s.toStdString().c_str(), rv);
-                if (res)
+                if (this->textToValueLocked(i, s.toStdString(), rv))
                     return rv;
             }
             return this->fxParams[i]->get();
@@ -71,6 +73,10 @@ AWConsolidatedAudioProcessor::AWConsolidatedAudioProcessor()
     addParameter(inLev);
     addParameter(outLev);
 
+    autoGainParam = new juce::AudioParameterBool({"autogain", 4}, "Auto Gain", false);
+    autoGainParam->addListener(this);
+    addParameter(autoGainParam);
+
     monoBehaviourParameter = new MonoBehaviourParameter(
         {"monoBehaviour", 3}, "Mono Behaviour", MonoBehaviourParameter::LeftOnly,
         juce::AudioParameterIntAttributes().withAutomatable(false));
@@ -78,16 +84,19 @@ AWConsolidatedAudioProcessor::AWConsolidatedAudioProcessor()
     addParameter(monoBehaviourParameter);
 
     juce::PropertiesFile::Options options;
-    options.applicationName = "AirwindowsConsolidated";
+    options.applicationName = "AWclean";
 #if JUCE_LINUX
-    options.folderName = ".config/AirwindowsConsolidated";
+    options.folderName = ".config/AWclean";
 #else
-    options.folderName = "AirwindowsConsolidated";
+    options.folderName = "AWclean";
 #endif
 
     options.filenameSuffix = "settings";
     options.osxLibrarySubFolder = "Application Support";
     properties = std::make_unique<juce::PropertiesFile>(options);
+
+    updateChecker =
+        std::make_unique<awclean::UpdateChecker>(JucePlugin_VersionString, AWCLEAN_REPO);
 
     auto defaultName = properties->getValue("startupEffect", "Galactic").toStdString();
     if (AirwinRegistry::nameToIndex.find(defaultName) == AirwinRegistry::nameToIndex.end())
@@ -188,6 +197,7 @@ void AWConsolidatedAudioProcessor::prepareToPlay(double sr, int samplesPerBlock)
     AirwinConsolidatedBase::defaultSampleRate = sr;
     if (awProcessor)
         awProcessor->setSampleRate(sr);
+    autoGain.setSampleRate(sr);
     isPlaying = true;
 }
 
@@ -280,6 +290,16 @@ template <typename T> void AWConsolidatedAudioProcessor::processBlockT(juce::Aud
         awProcessor->setParameter(i, fxParams[i]->get());
     }
 
+    // Auto gain matches the output to the signal arriving here, before the input knob,
+    // so the input knob works as drive and the result still lands at the same loudness.
+    const bool autoGainOn = autoGainParam->get();
+    if (autoGainOn && !autoGainWasOn)
+        autoGain.reset(!autoGain.locked);
+    autoGainWasOn = autoGainOn;
+    if (autoGainOn)
+        autoGain.measureInput(buffer.getArrayOfReadPointers(), inBus->getNumberOfChannels(),
+                              buffer.getNumSamples());
+
     if (inLev->isAmplifiyingOrAttenuating())
     {
         buffer.applyGain(inLev->getAmplitude<T>());
@@ -330,6 +350,10 @@ template <typename T> void AWConsolidatedAudioProcessor::processBlockT(juce::Aud
     // In LeftOnly mode, we don't need to do anything as the right monoBuffer is automatically
     // discarded
 
+    if (autoGainOn)
+        autoGain.processOutput(buffer.getArrayOfWritePointers(), outBus->getNumberOfChannels(),
+                               buffer.getNumSamples());
+
     if (outLev->isAmplifiyingOrAttenuating())
     {
         buffer.applyGain(outLev->getAmplitude<T>());
@@ -375,6 +399,8 @@ void AWConsolidatedAudioProcessor::setAWProcessorTo(int registryIndex, bool init
     {
         awProcessor->setSampleRate(getSampleRate());
     }
+    // a new effect means a new loudness relationship; start the match over
+    autoGain.reset(!autoGain.locked);
 
     if (initDisplay)
     {
@@ -403,11 +429,13 @@ void AWConsolidatedAudioProcessor::setupParamDisplaysFromDisplayProcessor(int in
         auto rg = AirwinRegistry::registry[index];
 
         nProcessorParams = rg.nParams;
+        currentOverlay = awclean::lookup(rg.name);
         for (int i = 0; i < rg.nParams && i < nAWParams; ++i)
         {
             char txt[kVstMaxParamStrLen];
             awDisplayProcessor->getParameterName(i, txt);
-            fxParams[i]->mutableName = txt;
+            auto op = awclean::param(currentOverlay, i);
+            fxParams[i]->mutableName = op ? juce::String::fromUTF8(op->label) : juce::String(txt);
             setParamsTo[i] = awDisplayProcessor->getParameter(i);
             defaultValues[i] = awDisplayProcessor->getParameter(i);
             active[i] = true;
@@ -450,6 +478,10 @@ void AWConsolidatedAudioProcessor::getStateInformation(juce::MemoryBlock &destDa
 
     xml->setAttribute("monoBehaviour", monoBehaviourParameter->get());
 
+    xml->setAttribute("autogain", autoGainParam->get());
+    xml->setAttribute("autogainLocked", autoGain.locked.load());
+    xml->setAttribute("autogainDb", autoGain.appliedDb.load());
+
     copyXmlToBinary(*xml, destData);
 }
 
@@ -483,6 +515,11 @@ void AWConsolidatedAudioProcessor::setStateInformation(const void *data, int siz
 
             auto mono = xmlState->getIntAttribute("monoBehaviour");
             *monoBehaviourParameter = static_cast<MonoBehaviourParameter::MonoBehaviour>(mono);
+
+            autoGainParam->setValueNotifyingHost(xmlState->getBoolAttribute("autogain") ? 1.f : 0.f);
+            autoGain.locked = xmlState->getBoolAttribute("autogainLocked");
+            if (autoGain.locked)
+                autoGain.setGainDb(xmlState->getDoubleAttribute("autogainDb"));
         }
 
 #if USE_JUCE_PROGRAMS

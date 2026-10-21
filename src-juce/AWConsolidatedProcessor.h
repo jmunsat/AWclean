@@ -5,6 +5,8 @@
 #include "AirwinRegistry.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "clap-juce-extensions/clap-juce-extensions.h"
+#include "AWCleanUpdate.h"
+#include "AWCleanAutoGain.h"
 
 #if MAC
 #include <execinfo.h>
@@ -314,7 +316,37 @@ class AWConsolidatedAudioProcessor : public juce::AudioProcessor,
     int nProcessorParams{0};
     std::atomic<int> curentProcessorIndex{0};
 
+    // AWclean overlay for the current effect; guarded by displayProcessorMutex
+    const awclean::Entry *currentOverlay{nullptr};
+    double overlaySampleRate() const
+    {
+        auto sr = getSampleRate();
+        return sr > 0 ? sr : 48000.0;
+    }
+    // Typed-in text to a 0..1 value, in the overlay's units first, then Airwindows'.
+    // Call with displayProcessorMutex held.
+    bool textToValueLocked(int i, const std::string &txt, float &out)
+    {
+        if (awclean::fromText(awclean::param(currentOverlay, i), txt, overlaySampleRate(), out))
+            return true;
+        return awDisplayProcessor && awDisplayProcessor->parameterTextToValue(i, txt.c_str(), out);
+    }
+    bool canTypeInLocked(int i)
+    {
+        auto p = awclean::param(currentOverlay, i);
+        if (p && (p->formula || p->steps))
+            return true;
+        return awDisplayProcessor && awDisplayProcessor->canConvertParameterTextToValue(i);
+    }
+
     std::unique_ptr<juce::PropertiesFile> properties;
+
+    std::unique_ptr<awclean::UpdateChecker> updateChecker;
+
+    // AWclean: loudness-matched output, after the effect and before the output knob
+    awclean::AutoGain autoGain;
+    juce::AudioParameterBool *autoGainParam{nullptr};
+    bool autoGainWasOn{false};
 
   private:
     template <typename T> struct PrecisionDependantProcessing
