@@ -33,6 +33,10 @@ AWConsolidatedAudioProcessor::AWConsolidatedAudioProcessor()
                     awDisplayProcessor->setParameter(id, fxParams[id]->get());
                 }
                 awDisplayProcessor->setParameter(i, f);
+                std::string ov;
+                if (awclean::display(awclean::param(this->currentOverlay, i), f,
+                                     this->overlaySampleRate(), ov))
+                    return ov;
                 char tl[kVstMaxParamStrLen], td[kVstMaxParamStrLen];
                 this->awDisplayProcessor->getParameterDisplay(i, td);
                 this->awDisplayProcessor->getParameterLabel(i, tl);
@@ -48,9 +52,7 @@ AWConsolidatedAudioProcessor::AWConsolidatedAudioProcessor()
             if (this->awDisplayProcessor && i < this->nProcessorParams)
             {
                 float rv = 0.f;
-                auto res =
-                    this->awDisplayProcessor->parameterTextToValue(i, s.toStdString().c_str(), rv);
-                if (res)
+                if (this->textToValueLocked(i, s.toStdString(), rv))
                     return rv;
             }
             return this->fxParams[i]->get();
@@ -78,16 +80,19 @@ AWConsolidatedAudioProcessor::AWConsolidatedAudioProcessor()
     addParameter(monoBehaviourParameter);
 
     juce::PropertiesFile::Options options;
-    options.applicationName = "AirwindowsConsolidated";
+    options.applicationName = "AWclean";
 #if JUCE_LINUX
-    options.folderName = ".config/AirwindowsConsolidated";
+    options.folderName = ".config/AWclean";
 #else
-    options.folderName = "AirwindowsConsolidated";
+    options.folderName = "AWclean";
 #endif
 
     options.filenameSuffix = "settings";
     options.osxLibrarySubFolder = "Application Support";
     properties = std::make_unique<juce::PropertiesFile>(options);
+
+    updateChecker =
+        std::make_unique<awclean::UpdateChecker>(JucePlugin_VersionString, AWCLEAN_REPO);
 
     auto defaultName = properties->getValue("startupEffect", "Galactic").toStdString();
     if (AirwinRegistry::nameToIndex.find(defaultName) == AirwinRegistry::nameToIndex.end())
@@ -403,11 +408,13 @@ void AWConsolidatedAudioProcessor::setupParamDisplaysFromDisplayProcessor(int in
         auto rg = AirwinRegistry::registry[index];
 
         nProcessorParams = rg.nParams;
+        currentOverlay = awclean::lookup(rg.name);
         for (int i = 0; i < rg.nParams && i < nAWParams; ++i)
         {
             char txt[kVstMaxParamStrLen];
             awDisplayProcessor->getParameterName(i, txt);
-            fxParams[i]->mutableName = txt;
+            auto op = awclean::param(currentOverlay, i);
+            fxParams[i]->mutableName = op ? juce::String::fromUTF8(op->label) : juce::String(txt);
             setParamsTo[i] = awDisplayProcessor->getParameter(i);
             defaultValues[i] = awDisplayProcessor->getParameter(i);
             active[i] = true;

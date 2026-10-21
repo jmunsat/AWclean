@@ -79,6 +79,8 @@ build_flavor()
       pkgbuild --sign "$MAC_INSTALLING_CERT" --root $workdir --identifier $ident --version $VERSION --install-location "$loc" "$TMPDIR/${PRODUCTFILE}_${flavor}.pkg" $sca || exit 1
       echo pkgbuild --sign "$MAC_INSTALLING_CERT" --root $workdir --identifier $ident --version $VERSION --install-location "$loc" "$TMPDIR/${PRODUCTFILE}_${flavor}.pkg" $sca || exit 1
     else
+      # No Developer ID: ad-hoc sign so Apple Silicon hosts will load the bundle
+      codesign --force -s - --deep "$workdir/$flavorprod"
       pkgbuild --root $workdir --identifier $ident --version $VERSION --install-location "$loc" "$TMPDIR/${PRODUCTFILE}_${flavor}.pkg" $sca || exit 1
     fi
 
@@ -87,19 +89,19 @@ build_flavor()
 
 
 if [[ -d $INDIR/$VST3 ]]; then
-    build_flavor "VST3" "$VST3" "org.surge-synth-team.${PRODUCTFILE}.vst3.pkg" "/Library/Audio/Plug-Ins/VST3"
+    build_flavor "VST3" "$VST3" "com.jmunsat.${PRODUCTFILE}.vst3.pkg" "/Library/Audio/Plug-Ins/VST3"
 fi
 
 if [[ -d $INDIR/$AU ]]; then
-    build_flavor "AU" "$AU" "org.surge-synth-team.${PRODUCTFILE}.component.pkg" "/Library/Audio/Plug-Ins/Components"
+    build_flavor "AU" "$AU" "com.jmunsat.${PRODUCTFILE}.component.pkg" "/Library/Audio/Plug-Ins/Components"
 fi
 
 if [[ -d $INDIR/$APP ]]; then
-    build_flavor "APP" "$APP" "org.surge-synth-team.${PRODUCTFILE}.app.pkg" "/tmp/sst-installer" $TMPDIR/AppResourcesPackageScript
+    build_flavor "APP" "$APP" "com.jmunsat.${PRODUCTFILE}.app.pkg" "/tmp/sst-installer" $TMPDIR/AppResourcesPackageScript
 fi
 
 if [[ -d $INDIR/$CLAP ]]; then
-    build_flavor "CLAP" "$CLAP" "org.surge-synth-team.${PRODUCTFILE}.clap.pkg" "/Library/Audio/Plug-Ins/CLAP"
+    build_flavor "CLAP" "$CLAP" "com.jmunsat.${PRODUCTFILE}.clap.pkg" "/Library/Audio/Plug-Ins/CLAP"
 fi
 
 echo --- Sub Packages Created ---
@@ -108,24 +110,24 @@ ls -l "${TMPDIR}"
 # create distribution.xml
 
 if [[ -d $INDIR/$VST3 ]]; then
-	VST3_PKG_REF="<pkg-ref id=\"org.surge-synth-team.${PRODUCTFILE}.vst3.pkg\"/>"
-	VST3_CHOICE="<line choice=\"org.surge-synth-team.${PRODUCTFILE}.vst3.pkg\"/>"
-	VST3_CHOICE_DEF="<choice id=\"org.surge-synth-team.${PRODUCTFILE}.vst3.pkg\" visible=\"true\" start_selected=\"true\" title=\"${PRODUCT} VST3\"><pkg-ref id=\"org.surge-synth-team.${PRODUCTFILE}.vst3.pkg\"/></choice><pkg-ref id=\"org.surge-synth-team.${PRODUCTFILE}.vst3.pkg\" version=\"${VERSION}\" onConclusion=\"none\">${PRODUCTFILE}_VST3.pkg</pkg-ref>"
+	VST3_PKG_REF="<pkg-ref id=\"com.jmunsat.${PRODUCTFILE}.vst3.pkg\"/>"
+	VST3_CHOICE="<line choice=\"com.jmunsat.${PRODUCTFILE}.vst3.pkg\"/>"
+	VST3_CHOICE_DEF="<choice id=\"com.jmunsat.${PRODUCTFILE}.vst3.pkg\" visible=\"true\" start_selected=\"true\" title=\"${PRODUCT} VST3\"><pkg-ref id=\"com.jmunsat.${PRODUCTFILE}.vst3.pkg\"/></choice><pkg-ref id=\"com.jmunsat.${PRODUCTFILE}.vst3.pkg\" version=\"${VERSION}\" onConclusion=\"none\">${PRODUCTFILE}_VST3.pkg</pkg-ref>"
 fi
 if [[ -d $INDIR/$AU ]]; then
-	AU_PKG_REF="<pkg-ref id=\"org.surge-synth-team.${PRODUCTFILE}.component.pkg\"/>"
-	AU_CHOICE="<line choice=\"org.surge-synth-team.${PRODUCTFILE}.component.pkg\"/>"
-	AU_CHOICE_DEF="<choice id=\"org.surge-synth-team.${PRODUCTFILE}.component.pkg\" visible=\"true\" start_selected=\"true\" title=\"${PRODUCT} Audio Unit\"><pkg-ref id=\"org.surge-synth-team.${PRODUCTFILE}.component.pkg\"/></choice><pkg-ref id=\"org.surge-synth-team.${PRODUCTFILE}.component.pkg\" version=\"${VERSION}\" onConclusion=\"none\">${PRODUCTFILE}_AU.pkg</pkg-ref>"
+	AU_PKG_REF="<pkg-ref id=\"com.jmunsat.${PRODUCTFILE}.component.pkg\"/>"
+	AU_CHOICE="<line choice=\"com.jmunsat.${PRODUCTFILE}.component.pkg\"/>"
+	AU_CHOICE_DEF="<choice id=\"com.jmunsat.${PRODUCTFILE}.component.pkg\" visible=\"true\" start_selected=\"true\" title=\"${PRODUCT} Audio Unit\"><pkg-ref id=\"com.jmunsat.${PRODUCTFILE}.component.pkg\"/></choice><pkg-ref id=\"com.jmunsat.${PRODUCTFILE}.component.pkg\" version=\"${VERSION}\" onConclusion=\"none\">${PRODUCTFILE}_AU.pkg</pkg-ref>"
 fi
 if [[ -d $INDIR/$CLAP ]]; then
-	CLAP_PKG_REF="<pkg-ref id=\"org.surge-synth-team.${PRODUCTFILE}.clap.pkg\"/>"
-	CLAP_CHOICE="<line choice=\"org.surge-synth-team.${PRODUCTFILE}.clap.pkg\"/>"
-	CLAP_CHOICE_DEF="<choice id=\"org.surge-synth-team.${PRODUCTFILE}.clap.pkg\" visible=\"true\" start_selected=\"true\" title=\"${PRODUCT} CLAP\"><pkg-ref id=\"org.surge-synth-team.${PRODUCTFILE}.clap.pkg\"/></choice><pkg-ref id=\"org.surge-synth-team.${PRODUCTFILE}.clap.pkg\" version=\"${VERSION}\" onConclusion=\"none\">${PRODUCTFILE}_CLAP.pkg</pkg-ref>"
+	CLAP_PKG_REF="<pkg-ref id=\"com.jmunsat.${PRODUCTFILE}.clap.pkg\"/>"
+	CLAP_CHOICE="<line choice=\"com.jmunsat.${PRODUCTFILE}.clap.pkg\"/>"
+	CLAP_CHOICE_DEF="<choice id=\"com.jmunsat.${PRODUCTFILE}.clap.pkg\" visible=\"true\" start_selected=\"true\" title=\"${PRODUCT} CLAP\"><pkg-ref id=\"com.jmunsat.${PRODUCTFILE}.clap.pkg\"/></choice><pkg-ref id=\"com.jmunsat.${PRODUCTFILE}.clap.pkg\" version=\"${VERSION}\" onConclusion=\"none\">${PRODUCTFILE}_CLAP.pkg</pkg-ref>"
 fi
 if [[ -d $INDIR/$APP ]]; then
-	APP_PKG_REF="<pkg-ref id=\"org.surge-synth-team.${PRODUCTFILE}.app.pkg\"/>"
-	APP_CHOICE="<line choice=\"org.surge-synth-team.${PRODUCTFILE}.app.pkg\"/>"
-	APP_CHOICE_DEF="<choice id=\"org.surge-synth-team.${PRODUCTFILE}.app.pkg\" visible=\"true\" start_selected=\"true\" title=\"${PRODUCT} App\"><pkg-ref id=\"org.surge-synth-team.${PRODUCTFILE}.app.pkg\"/></choice><pkg-ref id=\"org.surge-synth-team.${PRODUCTFILE}.app.pkg\" version=\"${VERSION}\" onConclusion=\"none\">${PRODUCTFILE}_APP.pkg</pkg-ref>"
+	APP_PKG_REF="<pkg-ref id=\"com.jmunsat.${PRODUCTFILE}.app.pkg\"/>"
+	APP_CHOICE="<line choice=\"com.jmunsat.${PRODUCTFILE}.app.pkg\"/>"
+	APP_CHOICE_DEF="<choice id=\"com.jmunsat.${PRODUCTFILE}.app.pkg\" visible=\"true\" start_selected=\"true\" title=\"${PRODUCT} App\"><pkg-ref id=\"com.jmunsat.${PRODUCTFILE}.app.pkg\"/></choice><pkg-ref id=\"com.jmunsat.${PRODUCTFILE}.app.pkg\" version=\"${VERSION}\" onConclusion=\"none\">${PRODUCTFILE}_APP.pkg</pkg-ref>"
 fi
 
 

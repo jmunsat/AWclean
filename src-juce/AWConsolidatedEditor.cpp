@@ -587,11 +587,13 @@ struct Picker : public juce::Component, public juce::TextEditor::Listener
         g.drawRoundedRectangle(bounds, 5, 1);
         g.setColour(findColour(ColourIds::pickerForeground));
         g.setFont(editor->lnf->lookupFont(pluginName));
+        auto shownName = juce::String::fromUTF8(awclean::displayName(rg.name, rg.title).c_str());
         if (!typeinEd->isVisible())
-            g.drawText(rg.name, bounds.reduced(8, 5), juce::Justification::centredBottom);
+            g.drawFittedText(shownName, bounds.reduced(8, 5).toNearestInt(),
+                             juce::Justification::centredBottom, 1, 0.6f);
         auto ga = juce::GlyphArrangement();
         auto tbx = bounds.reduced(8, 5);
-        ga.addFittedText(editor->lnf->lookupFont(pluginName), rg.name, tbx.getX(), tbx.getY(),
+        ga.addFittedText(editor->lnf->lookupFont(pluginName), shownName, tbx.getX(), tbx.getY(),
                          tbx.getWidth(), tbx.getHeight(), juce::Justification::centredBottom, 1);
         titleBox = ga.getBoundingBox(0, -1, true);
 
@@ -728,7 +730,7 @@ struct Picker : public juce::Component, public juce::TextEditor::Listener
         int idx = editor->processor.curentProcessorIndex;
         auto &rg = AirwinRegistry::registry[idx];
 
-        setTitle(rg.name + " (" + rg.category + ")");
+        setTitle(awclean::displayName(rg.name, rg.title) + " (" + rg.category + ")");
         if (getAccessibilityHandler())
             getAccessibilityHandler()->notifyAccessibilityEvent(
                 juce::AccessibilityEvent::titleChanged);
@@ -788,7 +790,9 @@ struct Picker : public juce::Component, public juce::TextEditor::Listener
             auto n = AirwinRegistry::registry[r].name;
             std::transform(n.begin(), n.end(), n.begin(),
                            [](unsigned char c) { return std::tolower(c); });
-            auto cat = AirwinRegistry::registry[r].category;
+            auto cat = AirwinRegistry::registry[r].category + " " +
+                       AirwinRegistry::registry[r].chrisCategory + " " +
+                       AirwinRegistry::registry[r].title;
             std::transform(cat.begin(), cat.end(), cat.begin(),
                            [](unsigned char c) { return std::tolower(c); });
             if (n.find(m) != std::string::npos || cat.find(m) != std::string::npos)
@@ -856,7 +860,8 @@ struct Picker : public juce::Component, public juce::TextEditor::Listener
 
             g.setFont(picker->editor->lnf->lookupFont(pluginTypeaheadName));
             g.setColour(picker->findColour(ColourIds::typeaheadName));
-            g.drawText(rg.name, bx, juce::Justification::bottomLeft);
+            g.drawText(juce::String::fromUTF8(awclean::displayName(rg.name, rg.title).c_str()),
+                       bx, juce::Justification::bottomLeft);
 
             g.setColour(picker->findColour(ColourIds::typeaheadCategory));
 
@@ -1098,7 +1103,7 @@ struct ParamDisp : juce::Component, juce::TextEditor::Listener
         bool go{false};
         {
             LOCK(editor->processor.displayProcessorMutex);
-            go = editor->processor.awDisplayProcessor->canConvertParameterTextToValue(index);
+            go = editor->processor.canTypeInLocked(index);
         }
 
         if (!go)
@@ -1134,8 +1139,7 @@ struct ParamDisp : juce::Component, juce::TextEditor::Listener
             bool worked{false};
             {
                 LOCK(editor->processor.displayProcessorMutex);
-                worked = editor->processor.awDisplayProcessor->parameterTextToValue(
-                    index, ed.getText().toRawUTF8(), f);
+                worked = editor->processor.textToValueLocked(index, ed.getText().toStdString(), f);
             }
 
             if (worked)
@@ -1188,6 +1192,18 @@ struct ParamDisp : juce::Component, juce::TextEditor::Listener
 
         g.setFont(editor->lnf->lookupFont(paramTitle));
         g.drawText(weakParam->getName(64), bounds, juce::Justification::topLeft);
+
+        // AWclean: words for each end of controls that have no real-unit readout
+        const auto &rg = AirwinRegistry::registry[editor->processor.curentProcessorIndex];
+        auto p = awclean::param(awclean::lookup(rg.name), index);
+        if (p && p->lo && p->hi && !p->formula && !p->steps)
+        {
+            g.setFont(editor->lnf->lookupFont(paramTitle).withHeight(11));
+            g.setColour(findColour(ColourIds::paramDispForeground).withAlpha(0.6f));
+            g.drawFittedText(juce::String::fromUTF8(p->lo) + " / " + juce::String::fromUTF8(p->hi),
+                             bounds.withTrimmedBottom(3).withTrimmedLeft(bounds.getWidth() / 2),
+                             juce::Justification::bottomRight, 1, 0.7f);
+        }
     }
 };
 
@@ -1663,6 +1679,16 @@ AWConsolidatedAudioProcessorEditor::AWConsolidatedAudioProcessorEditor(
     bypassButton = std::make_unique<BypassButton>(this);
     frame->addAndMakeVisible(*bypassButton);
 
+    updateButton = std::make_unique<juce::TextButton>("Update");
+    updateButton->onClick = [w = juce::Component::SafePointer(this)]() {
+        if (!w)
+            return;
+        auto info = awclean::UpdateStatus::get();
+        if (info.state == awclean::UpdateInfo::AVAILABLE)
+            juce::URL(info.pageUrl).launchInDefaultBrowser();
+    };
+    frame->addChildComponent(*updateButton);
+
     accessibleOrderWeakRefs.push_back(menuPicker.get());
     accessibleOrderWeakRefs.push_back(menuPicker->hamburger.get());
     accessibleOrderWeakRefs.push_back(menuPicker->heartButton.get());
@@ -1687,6 +1713,50 @@ AWConsolidatedAudioProcessorEditor::AWConsolidatedAudioProcessorEditor(
 
     // this lays out and sizes us for the stored zoom and doc visibility
     setZoomLevel(processor.properties->getIntValue("zoomLevel", 100), false);
+
+    if (processor.properties->getBoolValue("checkForUpdates", true))
+        checkForUpdates(false);
+}
+
+void AWConsolidatedAudioProcessorEditor::checkForUpdates(bool userAsked)
+{
+    showUpToDate = userAsked;
+    if (processor.updateChecker)
+        processor.updateChecker->check(userAsked);
+    lastUpdateGeneration = -1;
+}
+
+void AWConsolidatedAudioProcessorEditor::refreshUpdateButton()
+{
+    auto info = awclean::UpdateStatus::get();
+    switch (info.state)
+    {
+    case awclean::UpdateInfo::AVAILABLE:
+        updateButton->setButtonText("Update available: v" + juce::String(info.latestVersion));
+        updateButton->setEnabled(true);
+        updateButton->setVisible(true);
+        hideUpdateButtonAt = 0;
+        break;
+    case awclean::UpdateInfo::CHECKING:
+        updateButton->setButtonText("Checking for updates...");
+        updateButton->setEnabled(false);
+        updateButton->setVisible(showUpToDate);
+        break;
+    case awclean::UpdateInfo::UP_TO_DATE:
+    case awclean::UpdateInfo::FAILED:
+        updateButton->setButtonText(info.state == awclean::UpdateInfo::UP_TO_DATE
+                                        ? "AWclean is up to date"
+                                        : "Couldn't reach GitHub");
+        updateButton->setEnabled(false);
+        updateButton->setVisible(showUpToDate);
+        if (showUpToDate)
+            hideUpdateButtonAt = juce::Time::getMillisecondCounter() + 4000;
+        showUpToDate = false;
+        break;
+    default:
+        updateButton->setVisible(false);
+        break;
+    }
 }
 
 AWConsolidatedAudioProcessorEditor::~AWConsolidatedAudioProcessorEditor()
@@ -1768,12 +1838,58 @@ void AWConsolidatedAudioProcessorEditor::idle()
         postRebuildFocus = NOTHING_SPECIAL;
     }
 
+    auto ug = awclean::UpdateStatus::generation().load();
+    if (ug != lastUpdateGeneration)
+    {
+        lastUpdateGeneration = ug;
+        refreshUpdateButton();
+    }
+    if (hideUpdateButtonAt != 0 && juce::Time::getMillisecondCounter() > hideUpdateButtonAt)
+    {
+        hideUpdateButtonAt = 0;
+        updateButton->setVisible(false);
+    }
+
     if (processor.refreshUI.exchange(false))
     {
         bypassButton->setToggleState(processor.bypassParam->get(),
                                      juce::NotificationType::dontSendNotification);
         repaint();
     }
+}
+
+// AWclean: the plain-English block shown above Chris's documentation
+static std::string awcleanDocFor(const AirwinRegistry::awReg &rg)
+{
+    std::string res;
+    if (!rg.note.empty())
+        res += "WHAT IT IS\n\n" + rg.note + "\n\n";
+    auto e = awclean::lookup(rg.name);
+    if (e && e->nParams > 0)
+    {
+        res += "CONTROLS\n\n";
+        for (int i = 0; i < e->nParams; ++i)
+        {
+            auto p = awclean::param(e, i);
+            res += std::string("- ") + p->label;
+            if (p->lo && p->hi)
+                res += std::string(": ") + p->lo + " to " + p->hi;
+            if (p->steps)
+            {
+                std::string st = p->steps;
+                for (auto &c : st)
+                    if (c == '|')
+                        c = '/';
+                res += ": " + st;
+            }
+            if (p->note)
+                res += std::string(" (") + p->note + ")";
+            res += "\n";
+        }
+        res += "\n";
+    }
+    res += "Category: " + rg.category + " (Chris files it under " + rg.chrisCategory + ")";
+    return res;
 }
 
 void AWConsolidatedAudioProcessorEditor::resizeDocArea()
@@ -1789,16 +1905,21 @@ void AWConsolidatedAudioProcessorEditor::resizeDocArea()
         docBodyLabel->setVisible(true);
         docBodyEd->setVisible(true);
     }
+    const auto &rgd = AirwinRegistry::registry[processor.curentProcessorIndex];
     docString = AirwinRegistry::documentationStringFor(processor.curentProcessorIndex);
     if (docString.isEmpty())
-    {
-        docHeader = "# " + AirwinRegistry::registry[processor.curentProcessorIndex].whatText;
-        docString = "No documentation available.";
-    }
-    else
+        docString = "# " + rgd.whatText + "\n\nNo documentation available.";
+
+    if (rgd.title.empty())
     {
         docHeader = docString.upToFirstOccurrenceOf("\n", false, false);
         docString = docString.fromFirstOccurrenceOf("\n", false, false).trim();
+    }
+    else
+    {
+        docHeader = juce::String::fromUTF8(("# " + awclean::displayName(rgd.name, rgd.title)).c_str());
+        docString = juce::String::fromUTF8(awcleanDocFor(rgd).c_str()) +
+                    "\n\nFROM CHRIS (AIRWINDOWS)\n\n" + docString.trim();
     }
 
     // Load custom manual
@@ -1873,6 +1994,11 @@ void AWConsolidatedAudioProcessorEditor::resized()
     ta = ta.translated(contentWidth - 40 - 4 - 2 - 2, 0);
     outLevel->setBounds(ta.translated(-ta.getWidth() - 4, 1));
     bypassButton->setBounds(ta);
+
+    updateButton->setBounds(contentBounds()
+                                .withTrimmedTop(contentHeight - 40)
+                                .withSizeKeepingCentre(220, 40)
+                                .reduced(0, 7));
 }
 
 void AWConsolidatedAudioProcessorEditor::paint(juce::Graphics &g)
@@ -1900,12 +2026,12 @@ void AWConsolidatedAudioProcessorEditor::paintContents(juce::Graphics &g)
 
     g.setFont(lnf->lookupFont(airwindowsFooter));
     g.setColour(findColour(ColourIds::footerBrightLabel));
-    g.drawText("Airwindows", fa.withTrimmedTop(0), juce::Justification::centredTop);
+    g.drawText("AWclean", fa.withTrimmedTop(0), juce::Justification::centredTop);
 
     g.setFont(lnf->lookupFont(dateFooter));
     g.setColour(findColour(ColourIds::footerForeground));
 
-    auto fs = juce::String(__DATE__) + " " + BUILD_HASH;
+    auto fs = juce::String("v") + JucePlugin_VersionString + " on Airwindows " + BUILD_HASH;
     g.drawText(fs, fa.withTrimmedBottom(2), juce::Justification::centredBottom);
 
     if (clipperIcon)
@@ -2022,9 +2148,9 @@ void AWConsolidatedAudioProcessorEditor::showEffectsMenu(bool justCurrentCategor
 
     p.setLookAndFeel(popupLnf.get());
     if (justCurrentCategory)
-        p.addSectionHeader("Airwindows - " + ent.category);
+        p.addSectionHeader("AWclean - " + ent.category);
     else
-        p.addSectionHeader("Airwindows Consolidated");
+        p.addSectionHeader("AWclean");
     p.addSeparator();
 
     auto coll = getCurrentCollection();
@@ -2041,7 +2167,9 @@ void AWConsolidatedAudioProcessorEditor::showEffectsMenu(bool justCurrentCategor
             {
                 auto ig = AirwinRegistry::registry[n2i->second];
 
-                juce::PopupMenu::Item i(f + " (" + ig.category + ")");
+                juce::PopupMenu::Item i(
+                    juce::String::fromUTF8(awclean::displayName(f, ig.title).c_str()) + " (" +
+                    ig.category + ")");
                 i.isEnabled = stereoPluginsInMono || !processorIsMono || ig.isMono;
                 i.isTicked = f == ent.name;
                 if (processorIsMono || alwaysShowMonoStereoIcon)
@@ -2136,7 +2264,8 @@ void AWConsolidatedAudioProcessorEditor::showEffectsMenu(bool justCurrentCategor
 
             if (include)
             {
-                juce::PopupMenu::Item i(nm);
+                juce::PopupMenu::Item i(
+                    juce::String::fromUTF8(awclean::displayName(nm, rg.title).c_str()));
                 i.isEnabled = stereoPluginsInMono || !processorIsMono || rg.isMono;
                 i.isTicked = nm == ent.name;
                 if (processorIsMono || alwaysShowMonoStereoIcon)
@@ -2157,7 +2286,10 @@ void AWConsolidatedAudioProcessorEditor::showEffectsMenu(bool justCurrentCategor
 
     p.addSeparator();
 
-    p.addItem("Read the Plugin Manual", []() {
+    p.addItem("AWclean on GitHub", []() {
+        juce::URL("https://github.com/jmunsat/AWclean").launchInDefaultBrowser();
+    });
+    p.addItem("Read the Airwindows Consolidated Manual", []() {
         juce::URL("https://github.com/baconpaul/airwin2rack/blob/main/doc/manualdaw.md")
             .launchInDefaultBrowser();
     });
@@ -2245,6 +2377,19 @@ juce::PopupMenu AWConsolidatedAudioProcessorEditor::makeSettingsMenu(bool withHe
                              w->processor.properties->setValue("editorIsReadOnly", !isRO);
                              w->docBodyEd->setReadOnly(!isRO);
                          });
+
+    settingsMenu.addSeparator();
+
+    auto autoCheck = processor.properties->getBoolValue("checkForUpdates", true);
+    settingsMenu.addItem("Check for Updates When Opened", true, autoCheck,
+                         [autoCheck, w = juce::Component::SafePointer(this)]() {
+                             if (w)
+                                 w->processor.properties->setValue("checkForUpdates", !autoCheck);
+                         });
+    settingsMenu.addItem("Check for Updates Now", [w = juce::Component::SafePointer(this)]() {
+        if (w)
+            w->checkForUpdates(true);
+    });
 
     settingsMenu.addSeparator();
 

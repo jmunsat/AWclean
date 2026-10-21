@@ -199,6 +199,13 @@ class AWConsolidatedAudioProcessorEditor : public juce::AudioProcessorEditor,
     void sizeBasedOnDocAreaDisplay();
 
     std::unique_ptr<SettingsCog> settingsCog;
+    // AWclean: shows when GitHub has a newer release; opens the release page
+    std::unique_ptr<juce::TextButton> updateButton;
+    int lastUpdateGeneration{-1};
+    bool showUpToDate{false};
+    juce::uint32 hideUpdateButtonAt{0};
+    void refreshUpdateButton();
+    void checkForUpdates(bool userAsked);
     std::unique_ptr<BypassButton> bypassButton;
     juce::PopupMenu makeSettingsMenu(bool withHeader);
 
