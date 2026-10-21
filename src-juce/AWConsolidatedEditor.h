@@ -16,6 +16,7 @@ struct SettingsCog;
 struct DocHeader;
 struct BypassButton;
 struct ZoomFrame;
+struct Browser;
 
 enum ColourIds
 {
@@ -160,6 +161,9 @@ class AWConsolidatedAudioProcessorEditor : public juce::AudioProcessorEditor,
     AWConsolidatedAudioProcessor &processor;
 
     static constexpr int baseWidth = 600, baseHeight = 600;
+    // AWclean "Paper" layout: one fader row per control
+    static constexpr int rowX = 16, rowTop = 74, rowH = 46, rowW = baseWidth - 2 * rowX;
+    static constexpr int rowLabelW = 120, rowValueW = 92;
     static constexpr std::array<int, 7> zoomLevels{75, 90, 100, 125, 150, 175, 200};
 
     // the frame is laid out at content size and scaled by the zoom transform
@@ -199,6 +203,12 @@ class AWConsolidatedAudioProcessorEditor : public juce::AudioProcessorEditor,
     void sizeBasedOnDocAreaDisplay();
 
     std::unique_ptr<SettingsCog> settingsCog;
+    // AWclean: plugin browser with search, category chips and favorites
+    std::unique_ptr<Browser> browser;
+    void openBrowser(const std::string &filter);
+    void closeBrowser();
+    void toggleFavorite(const std::string &name);
+    std::unique_ptr<juce::TextButton> docToggle;
     // AWclean: shows when GitHub has a newer release; opens the release page
     std::unique_ptr<juce::TextButton> updateButton;
     int lastUpdateGeneration{-1};
