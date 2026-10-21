@@ -49,8 +49,9 @@ Formulas use `x` (the 0 to 1 knob value) and `sr` (sample rate), with `+ - * / ^
 
 ## Releasing
 
-Push a tag like `v1.0.0`. CI builds Windows, Mac and Linux installers and publishes a
-GitHub release, which is what the update button looks for.
+Either push a tag like `v1.0.0`, or open Actions > Build AWclean > Run workflow and type
+a version like `1.0.1`. CI builds Windows, Mac and Linux installers and publishes a GitHub
+release with that tag, which is what the update button looks for.
 
 ## License
 
